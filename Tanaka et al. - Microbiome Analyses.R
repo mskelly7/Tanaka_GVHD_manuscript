@@ -1,6 +1,5 @@
 # Analyses of shotgun metagenomic sequencing data for Tanaka et al. 
 # Statistician: Matthew Kelly, MD, MPH
-# Date completed: 11/12/19
 
 set.seed(1234)
 library(phyloseq)
@@ -14,11 +13,13 @@ library(cowplot)
 
 remove(list=ls())
 # Need to set working directory
-setwd("___________") 
+setwd("C:/Users/msk37/Google Drive/Research/SAS_BMT/UMass_GVHD") 
 
 phy.gvhd <- readRDS("phy.gvhd.rds")
 metadata_gvhd <- data.frame(sample_data(phy.gvhd))
 
+phy.gvhd <- transform_sample_counts(phy.gvhd, function(OTU) round(OTU))
+sample_sums(phy.gvhd)
 nsamples(phy.gvhd)
 ntaxa(phy.gvhd)
 # 229 taxa
@@ -31,13 +32,44 @@ ntaxa(phy.orders)
 phy.phyla <- tax_glom(phy.gvhd, taxrank = 'Phylum')
 ntaxa(phy.phyla)
 # 6 phyla
-remove(phy.genera, phy.orders, phy.phyla)
+remove(phy.genera, phy.phyla)
+
+######################################################################################################################################
+# PATIENT CHARACTERISTICS
+
+patients <- metadata_gvhd[which(metadata_gvhd$time_group=="pre"),]
+cefepime <- patients[which(patients$treatment=="cefepime"),]
+summary(cefepime$age)
+table(cefepime$sex)
+prop.table(table(cefepime$sex))
+table(cefepime$race)
+prop.table(table(cefepime$race))
+table(cefepime$diagnosis)
+prop.table(table(cefepime$diagnosis))
+table(cefepime$donor_hsct)
+prop.table(table(cefepime$donor_hsct))
+table(cefepime$hsct_source)
+prop.table(table(cefepime$hsct_source))
+table(cefepime$hla)
+prop.table(table(cefepime$hla))
+
+anaerobic <- patients[which(patients$treatment=="anaerobic"),]
+summary(anaerobic$age)
+table(anaerobic$sex)
+prop.table(table(anaerobic$sex))
+table(anaerobic$race)
+prop.table(table(anaerobic$race))
+table(anaerobic$diagnosis)
+prop.table(table(anaerobic$diagnosis))
+table(anaerobic$donor_hsct)
+prop.table(table(anaerobic$donor_hsct))
+table(anaerobic$hsct_source)
+prop.table(table(anaerobic$hsct_source))
+table(anaerobic$hla)
+prop.table(table(anaerobic$hla))
 
 ######################################################################################################################################
 # ANALYSES OF ALPHA DIVERSITY
-
-phy.gvhd <- transform_sample_counts(phy.gvhd, function(OTU) round(OTU))
-sample_sums(phy.gvhd)
 
 # Sample Reads
 sum(sample_sums(phy.gvhd))
@@ -1041,3 +1073,55 @@ png(file="Results/Clostridiales Abundance by Antibiotics.png", width = 8, height
 plot(clostridiales)
 dev.off()
 remove(clostridiales, clostridiales_df)
+
+######################################################################################################################################
+# USE OF ANCOM FOR DIFFERENTIAL ABUNDANCE TESTING
+
+# OTU table should be a matrix/data.frame with each feature in rows and sample in columns 
+# Metadata should be a matrix/data.frame containing the sample identifier
+
+otu_gvhd <- data.frame(otu_table(phy.orders))
+
+source("C:/Users/msk37/Desktop/ANCOM-II/ANCOM-master/scripts/ancom_v2.1.R")
+
+# Random intercept model 
+# Detection of differentially abundant genera by antibiotic group accounting for fixed time effect and random subject effect
+# Each subject has his/her own intercept
+
+# Step 1: Data preprocessing
+
+sample_var = "ward_id"; group_var = "treatment"
+out_cut = 0.05; zero_cut = 0.90; lib_cut = 1000; neg_lb = FALSE
+prepro = feature_table_pre_process(otu_gvhd, metadata_gvhd, sample_var, group_var, 
+                                   out_cut, zero_cut, lib_cut, neg_lb)
+feature_table = prepro$feature_table # Preprocessed feature table
+meta_data = prepro$meta_data # Preprocessed metadata
+struc_zero = prepro$structure_zeros # Structural zero info
+
+# Step 2: ANCOM
+
+main_var = "treatment"; p_adj_method = "BH"; alpha = 0.05
+# Time as fixed effect and subject as random effect
+adj_formula = "time_group"; rand_formula = "~ 1 | study_id"
+res = ANCOM(feature_table, meta_data, struc_zero, main_var, p_adj_method, 
+            alpha, adj_formula, rand_formula)
+write_csv(res$out, "Results/ANCOM_results.csv")
+
+# Step 3: Volcano Plot
+
+# Number of taxa except structural zeros
+n_taxa = ifelse(is.null(struc_zero), nrow(feature_table), sum(apply(struc_zero, 1, sum) == 0))
+
+# Cutoff values for declaring differentially abundant taxa
+cut_off = c(0.9 * (n_taxa -1), 0.8 * (n_taxa -1), 0.7 * (n_taxa -1), 0.6 * (n_taxa -1))
+names(cut_off) = c("detected_0.9", "detected_0.8", "detected_0.7", "detected_0.6")
+
+# Annotation data
+dat_ann = data.frame(x = min(res$fig$data$x), y = cut_off["detected_0.7"], label = "W[0.7]")
+
+fig = res$fig +  
+  geom_hline(yintercept = cut_off["detected_0.7"], linetype = "dashed") + 
+  geom_text(data = dat_ann, aes(x = x, y = y, label = label), 
+            size = 4, vjust = -0.5, hjust = 0, color = "orange", parse = TRUE)
+fig  
+ggsave("Results/ANCOM_results.jpeg", height=5, width=6.25, units='in', dpi = 300)
