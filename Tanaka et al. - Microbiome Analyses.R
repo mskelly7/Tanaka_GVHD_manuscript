@@ -52,6 +52,10 @@ table(cefepime$hsct_source)
 prop.table(table(cefepime$hsct_source))
 table(cefepime$hla)
 prop.table(table(cefepime$hla))
+table(cefepime$hsct_prep)
+prop.table(table(cefepime$hsct_prep))
+table(cefepime$gvhd_prophy)
+prop.table(table(cefepime$gvhd_prophy))
 
 anaerobic <- patients[which(patients$treatment=="anaerobic"),]
 summary(anaerobic$age)
@@ -67,6 +71,10 @@ table(anaerobic$hsct_source)
 prop.table(table(anaerobic$hsct_source))
 table(anaerobic$hla)
 prop.table(table(anaerobic$hla))
+table(anaerobic$hsct_prep)
+prop.table(table(anaerobic$hsct_prep))
+table(anaerobic$gvhd_prophy)
+prop.table(table(anaerobic$gvhd_prophy))
 
 ######################################################################################################################################
 # ANALYSES OF ALPHA DIVERSITY
